@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Pola-Memories 감성 다이어리</title>
+    <style>
+        /* === 1. 테마 및 전체 화면 설정 === */
+        body {
+            margin: 0; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; perspective: 1000px;
+            transition: background-image 1s ease-in-out; background-color: #10081a;
+            background-image: url('https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80');
+            background-size: cover; background-position: center;
+        }
+        body.theme-sunset { background-image: url('https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=1920&q=80'); }
+        body.theme-dawn { background-image: url('https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=1920&q=80'); }
+
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 0; pointer-events: none; }
+
+        .top-controls {
+            position: absolute; top: 30px; right: 40px; display: flex; gap: 15px; z-index: 100;
+        }
+        .top-btn {
+            background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 20px; padding: 8px 20px; color: white; font-size: 14px;
+            cursor: pointer; backdrop-filter: blur(8px); transition: all 0.3s; font-weight: bold;
+        }
+        .top-btn:hover { background: rgba(255, 255, 255, 0.4); transform: scale(1.05); }
+
+        .desk {
+            position: absolute; bottom: 0; width: 100%; height: 35vh;
+            background: linear-gradient(to bottom, rgba(62, 39, 26, 0.8), rgba(20, 10, 5, 0.95)); 
+            border-top: 3px solid rgba(255,255,255,0.1); z-index: 1; backdrop-filter: blur(5px);
+        }
+
+        .screen {
+            width: 100%; height: 100%; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; position: absolute;
+            top: 0; left: 0; z-index: 3; transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .screen.hidden { opacity: 0; pointer-events: none; transform: scale(0.95); }
+
+        /* === 2. 로그인 스크린 === */
+        .login-box {
+            background: rgba(255, 253, 248, 0.85); padding: 50px; border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); border: 5px solid #8b5a2b;
+            text-align: center; backdrop-filter: blur(10px); display: flex; flex-direction: column; gap: 20px;
+            width: 350px;
+        }
+        .login-box h1 { color: #5c3a21; margin: 0; font-family: 'Georgia', serif; letter-spacing: 2px; }
+        
+        .google-login-btn {
+            background: white; border: 1px solid #ccc; padding: 15px; border-radius: 10px;
+            font-weight: bold; font-size: 16px; color: #333; cursor: pointer; transition: transform 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .google-login-btn img { width: 20px; height: 20px; }
+        .google-login-btn:hover { transform: scale(1.05); background: #f9f9f9; }
+
+        /* === 3. 3D 캐러셀 및 다이어리 커버 === */
+        .carousel-container { position: relative; width: 800px; height: 380px; display: flex; justify-content: center; align-items: center; }
+        .diary-cover {
+            position: absolute; width: 220px; height: 320px; border-radius: 5px 15px 15px 5px;
+            box-shadow: 15px 20px 30px rgba(0,0,0,0.6), inset -5px 0 10px rgba(0,0,0,0.3);
+            display: flex; justify-content: center; align-items: center; cursor: pointer;
+            transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.5s, box-shadow 0.5s;
+            color: rgba(255, 255, 255, 0.9); font-family: 'Georgia', serif; font-size: 16px;
+            letter-spacing: 2px; text-align: center; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            font-weight: bold; padding: 0 20px; box-sizing: border-box; background-color: #5c3a21;
+            background-image: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.4) 100%);
+            pointer-events: auto; /* 클릭 버그 방지용 */
+        }
+        .diary-cover::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 15px;
+            background: linear-gradient(to right, rgba(255,255,255,0.2), rgba(0,0,0,0.4)); border-radius: 5px 0 0 5px;
+        }
+
+        .add-new-btn { font-size: 50px; color: rgba(255,255,255,0.5); }
+
+        .item-hidden-left { transform: translateX(-350px) scale(0.6); opacity: 0; z-index: 1; pointer-events: none; }
+        .item-prev { transform: translateX(-200px) scale(0.8) rotateY(15deg); opacity: 0.8; z-index: 2; }
+        .item-active { transform: translateX(0) scale(1.1) translateZ(50px); opacity: 1; z-index: 3; box-shadow: 0 30px 50px rgba(0,0,0,0.8); }
+        .item-active:hover { transform: translateX(0) scale(1.15) translateZ(80px); }
+        .item-next { transform: translateX(200px) scale(0.8) rotateY(-15deg); opacity: 0.8; z-index: 2; }
+        .item-hidden-right { transform: translateX(350px) scale(0.6); opacity: 0; z-index: 1; pointer-events: none; }
+
+        .diary-cover.opening { transform: translateX(0) scale(2.5) translateZ(300px) rotateY(-15deg); opacity: 0; pointer-events: none; }
+
+        .carousel-instruction {
+            color: rgba(255, 255, 255, 0.9); margin-top: 15px; font-size: 16px;
+            text-shadow: 0 2px 5px rgba(0,0,0,1); background: rgba(0,0,0,0.4); padding: 8px 20px; border-radius: 20px;
+        }
+
+        .customize-panel {
+            margin-top: 15px; display: flex; gap: 15px; background: rgba(255, 255, 255, 0.15);
+            padding: 10px 20px; border-radius: 30px; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2); align-items: center;
+        }
+        .customize-panel input[type="text"] {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.4);
+            color: white; padding: 8px 15px; border-radius: 15px; font-size: 14px; outline: none; width: 180px; text-align: center;
+        }
+        .customize-panel input[type="color"] { -webkit-appearance: none; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; background: none; }
+        .customize-panel input[type="color"]::-webkit-color-swatch { border: 2px solid white; border-radius: 50%; }
+
+        /* === 4. 일기장 내부 === */
+        .diary-wrapper { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        
+        .diary-header-bar {
+            display: flex; align-items: center; gap: 15px; background: rgba(0, 0, 0, 0.5);
+            padding: 10px 25px; border-radius: 25px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1);
+        }
+        .diary-header-bar label { font-weight: bold; font-size: 14px; letter-spacing: 1px; color: #d4ba94;}
+        .diary-header-bar input[type="date"] {
+            background: #fffdf8; border: 2px solid #7d5e3c; border-radius: 10px;
+            padding: 5px 10px; font-size: 15px; font-weight: bold; color: #333; outline: none; cursor: pointer;
+        }
+
+        .diary-open-container {
+            display: flex; width: 950px; height: 580px; background: #fffdf8; border-radius: 10px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.9); border: 10px solid #5c3a21; transition: border-color 0.3s;
+        }
+
+        .page { flex: 1; padding: 40px; display: flex; flex-direction: column; position: relative; transition: opacity 0.3s ease; }
+        .left-page { border-right: 2px solid #d4c5b0; background: #fbf7ef; justify-content: center; align-items: center; }
+        .right-page { background: #fffdf8; background-image: repeating-linear-gradient(transparent, transparent 39px, #e0d8c0 40px); }
+
+        .polaroid-frame {
+            width: 300px; height: 360px; background: white; padding: 15px 15px 50px 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2); transform: rotate(-2deg); display: flex; flex-direction: column; position: relative;
+        }
+        .upload-label { flex: 1; background: #eaeaea; display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; overflow: hidden; border: 2px dashed #ccc; }
+        #image-preview { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+        .polaroid-caption { text-align: right; color: #aaa; margin-top: 15px; font-family: monospace; font-weight: bold; font-size: 16px;}
+
+        .diary-text {
+            width: 100%; flex-grow: 1; border: none; background: transparent;
+            resize: none; font-size: 18px; line-height: 40px; outline: none; color: #333; margin-bottom: 10px;
+        }
+
+        .page-controls {
+            display: flex; justify-content: center; align-items: center; gap: 15px;
+            margin-bottom: 15px; background: rgba(0,0,0,0.03); padding: 5px; border-radius: 10px;
+        }
+        .page-num-indicator { font-weight: bold; color: #7d5e3c; font-size: 15px; min-width: 60px; text-align: center; }
+        .mini-btn { background: #fffdf8; border: 1px solid #7d5e3c; border-radius: 5px; padding: 5px 12px; font-size: 12px; font-weight: bold; cursor: pointer; color: #5c3a21; }
+        .mini-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .action-buttons { display: flex; justify-content: flex-end; gap: 15px; }
+        .action-btn { border-radius: 8px; padding: 12px 25px; font-weight: bold; font-size: 15px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.2); transition: transform 0.2s; }
+        .action-btn:hover { transform: scale(1.05); }
+        .home-btn { background: #e8e0d5; border: 2px solid #bbaea0; color: #555; }
+        .empathy-btn { background: linear-gradient(to bottom, #d4ba94, #b49365); border: 2px solid #7d5e3c; color: #333; }
+
+        /* AI 모달 */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(5px); }
+        .modal-content { background: #fffdf8; padding: 40px; border-radius: 15px; text-align: center; width: 400px; border: 5px solid #d4ba94; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .ai-character { font-size: 70px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="overlay"></div>
+    <div class="desk"></div>
+
+    <div class="top-controls" id="top-controls" style="display:none;">
+        <span id="user-greeting" style="color:white; font-weight:bold; align-self:center;"></span>
+        <button class="top-btn" onclick="toggleTheme()">배경 변경 🖼️</button>
+        <button class="top-btn" onclick="executeLogout()">로그아웃</button>
+    </div>
+
+    <div id="login-screen" class="screen">
+        <div class="login-box">
+            <h1>POLA-MEMORIES</h1>
+            <p style="color:#7d5e3c; margin:0; font-weight:bold;">당신만의 감성 일기장</p>
+            <button class="google-login-btn" onclick="executeGoogleLogin()">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google">
+                Google 계정으로 시작하기
+            </button>
+        </div>
+    </div>
+
+    <div id="carousel-screen" class="screen hidden">
+        <div class="carousel-container" id="carousel"></div>
+        <p class="carousel-instruction">중앙의 다이어리를 클릭하면 일기장이 열립니다 📖</p>
+        <div class="customize-panel">
+            <input type="text" id="custom-title" placeholder="다이어리 제목 입력" oninput="updateActiveTitle(this.value)">
+            <input type="color" id="custom-color" onchange="updateActiveColor(this.value)">
+        </div>
+    </div>
+
+    <div id="diary-screen" class="screen hidden">
+        <div class="diary-wrapper">
+            <div class="diary-header-bar">
+                <label for="diary-date">📅 기록 날짜 :</label>
+                <input type="date" id="diary-date" onchange="handleDateChange(this.value)">
+            </div>
+            <div class="diary-open-container" id="diary-border">
+                <div class="page left-page">
+                    <div class="polaroid-frame">
+                        <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                        <label for="image-upload" class="upload-label">
+                            <span id="upload-text" style="color:#777; font-weight:bold;">+ 사진 업로드</span>
+                            <img id="image-preview" src="" alt="미리보기" style="display: none;">
+                        </label>
+                        <div class="polaroid-caption">INSTAX</div>
+                    </div>
+                </div>
+                <div class="page right-page">
+                    <textarea class="diary-text" id="diary-input" placeholder="오늘 하루는 어땠나요? 감정을 자유롭게 적어주세요..." spellcheck="false"></textarea>
+                    <div class="page-controls">
+                        <button class="mini-btn" id="prev-page-btn" onclick="navigatePage(-1)">이전 장</button>
+                        <span class="page-num-indicator" id="page-indicator">1 / 1</span>
+                        <button class="mini-btn" id="next-page-btn" onclick="navigatePage(1)">다음 장</button>
+                        <button class="mini-btn" id="add-page-btn" onclick="addNewPage()" style="background:#d4ba94;">+ 새 장 추가</button>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="action-btn home-btn" onclick="goBack()">다이어리 덮기</button>
+                        <button class="action-btn empathy-btn" onclick="saveDiary()">공감 받기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="ai-character" id="ai-emoji">✨🤖✨</div>
+            <h3 style="color:#5c3a21;">AI 친구의 답장</h3>
+            <p id="ai-message" style="line-height: 1.6; color:#444; font-size:16px;">분석 중입니다...</p>
+            <button class="action-btn empathy-btn" onclick="closeModal()" style="margin-top:20px; width:100%;">확인</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
+        from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        // ⭐️ Firestore 데이터베이스 모듈 추가 로드
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYzeh_BV2v_LfgvsD4apOXlPLC0GONK40",
+            authDomain: "diary-46203.firebaseapp.com",
+            projectId: "diary-46203",
+            storageBucket: "diary-46203.firebasestorage.app",
+            messagingSenderId: "515845388175",
+            appId: "1:515845388175:web:c9b2554da9bd508c1cbdfa",
+            measurementId: "G-4V881XBY4B"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+        // ⭐️ 데이터베이스 초기화
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let userDiaries = []; 
+        let userEntries = {}; 
+        let selectedDate = new Date().toISOString().split('T')[0];
+        document.getElementById('diary-date').value = selectedDate;
+
+        window.executeGoogleLogin = function() {
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    // 로그인 성공 시 처리는 아래 onAuthStateChanged에서 안전하게 연동됩니다.
+                }).catch((error) => {
+                    alert("구글 로그인에 실패했습니다: " + error.message);
+                });
+        };
+
+        window.executeLogout = function() {
+            signOut(auth).then(() => {
+                handleLogoutSuccess();
+            }).catch((error) => {
+                console.error("로그아웃 에러:", error);
+            });
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                handleLoginSuccess(user.displayName);
+            } else {
+                handleLogoutSuccess();
+            }
+        });
+
+
+        async function handleLoginSuccess(username) {
+            currentUser = username;
+            if (auth.currentUser) {
+                const uid = auth.currentUser.uid;
+                try {
+                    // 클라우드 데이터베이스에서 유저의 일기장 세팅 불러오기
+                    const userDocSnap = await getDoc(doc(db, "users", uid));
+                    if (userDocSnap.exists()) {
+                        userDiaries = userDocSnap.data().diaries || [];
+                    } else {
+                        // 최초 로그인 시 기본 일기장 세팅 자동 생성 후 클라우드 저장
+                        userDiaries = [
+                            { id: 'd_1', title: '나의 첫 일기장', color: '#8b4545' },
+                            { id: 'd_2', title: '아이디어 노트', color: '#3d4a50' }
+                        ];
+                        await setDoc(doc(db, "users", uid), { diaries: userDiaries });
+                    }
+                } catch (error) {
+                    console.error("데이터 로드 실패, 로컬 백업 사용:", error);
+                    const loadedDiaries = localStorage.getItem(`diaries_${currentUser}`);
+                    userDiaries = loadedDiaries ? JSON.parse(loadedDiaries) : [{ id: 'd_1', title: '나의 첫 일기장', color: '#8b4545' }, { id: 'd_2', title: '아이디어 노트', color: '#3d4a50' }];
+                }
+            }
+
+            const loadedEntries = localStorage.getItem(`entries_${currentUser}`);
+            userEntries = loadedEntries ? JSON.parse(loadedEntries) : {};
+
+            document.getElementById('user-greeting').innerText = `${currentUser}님의 서재`;
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('top-controls').style.display = 'flex';
+            
+            renderCarousel();
+            setTimeout(() => { document.getElementById('carousel-screen').classList.remove('hidden'); }, 300);
+        }
+
+        function handleLogoutSuccess() {
+            currentUser = null;
+            document.getElementById('top-controls').style.display = 'none';
+            document.getElementById('carousel-screen').classList.add('hidden');
+            document.getElementById('diary-screen').classList.add('hidden');
+            setTimeout(() => { document.getElementById('login-screen').classList.remove('hidden'); }, 500);
+        }
+
+        async function saveUserDiaries() { 
+            localStorage.setItem(`diaries_${currentUser}`, JSON.stringify(userDiaries)); 
+            if (auth.currentUser) {
+                const uid = auth.currentUser.uid;
+                try {
+                    await setDoc(doc(db, "users", uid), { diaries: userDiaries }, { merge: true });
+                } catch (error) {
+                    console.error("Firestore 다이어리 저장 실패:", error);
+                }
+            }
+        }
+
+        async function saveUserEntries() { 
+            localStorage.setItem(`entries_${currentUser}`, JSON.stringify(userEntries)); 
+            if (auth.currentUser && activeDiaryId && selectedDate) {
+                const uid = auth.currentUser.uid;
+                try {
+                    // 용량 초과 방지를 위해 각 일기장과 날짜별로 별도 클라우드 문서 분할 보관
+                    const entryData = userEntries[activeDiaryId][selectedDate] || [];
+                    await setDoc(doc(db, "users", uid, "entries", `${activeDiaryId}_${selectedDate}`), {
+                        pages: entryData
+                    });
+                } catch (error) {
+                    console.error("Firestore 일기 페이지 저장 실패:", error);
+                }
+            }
+        }
+        // === 배경 테마 ===
+        const themes = ['', 'theme-sunset', 'theme-dawn'];
+        let currentThemeIndex = 0;
+        window.toggleTheme = function() {
+            document.body.className = '';
+            currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+            if (themes[currentThemeIndex]) document.body.classList.add(themes[currentThemeIndex]);
+        }
+
+        // === 동적 캐러셀 생성 및 제어 ===
+        let items = [];
+        let currentIndex = 0;
+        let activeDiaryId = null;
+
+        window.renderCarousel = function() {
+            const container = document.getElementById('carousel');
+            container.innerHTML = ''; 
+
+            userDiaries.forEach((diary, index) => {
+                const div = document.createElement('div');
+                div.className = 'diary-cover';
+                div.style.backgroundColor = diary.color;
+                div.innerHTML = `<span class="cover-title">${diary.title}</span>`;
+                div.onclick = () => handleCoverClick(index);
+                container.appendChild(div);
+            });
+
+            const addDiv = document.createElement('div');
+            addDiv.className = 'diary-cover';
+            addDiv.style.backgroundColor = '#4a4a4a';
+            addDiv.innerHTML = `<span class="add-new-btn">+</span><br><span style="font-size:12px; margin-top:10px;">새 일기장 추가</span>`;
+            addDiv.onclick = () => addNewDiaryBook();
+            container.appendChild(addDiv);
+
+            items = document.querySelectorAll('.diary-cover');
+            currentIndex = Math.min(Math.floor(userDiaries.length / 2), userDiaries.length - 1);
+            if(currentIndex < 0) currentIndex = 0;
+            updateCarousel();
+        }
+
+        window.addNewDiaryBook = function() {
+            const newId = 'd_' + Date.now();
+            userDiaries.push({ id: newId, title: '새로운 일기장', color: '#5c3a21' });
+            saveUserDiaries();
+            renderCarousel();
+            currentIndex = userDiaries.length - 1; 
+            updateCarousel();
+        }
+
+        function updateCarousel() {
+            items.forEach((item, index) => {
+                item.classList.remove('item-active', 'item-prev', 'item-next', 'item-hidden-left', 'item-hidden-right');
+                if (index === currentIndex) {
+                    item.classList.add('item-active');
+                    syncCustomizePanel(index);
+                } else if (index === currentIndex - 1) item.classList.add('item-prev');
+                else if (index === currentIndex + 1) item.classList.add('item-next');
+                else if (index < currentIndex - 1) item.classList.add('item-hidden-left');
+                else if (index > currentIndex + 1) item.classList.add('item-hidden-right');
+            });
+        }
+
+        window.handleCoverClick = function(index) {
+            if(index === userDiaries.length) return; 
+
+            if (currentIndex === index) {
+                openDiaryWithAnimation();
+            } else { 
+                currentIndex = index; 
+                updateCarousel(); 
+            }
+        }
+
+        document.getElementById('carousel').addEventListener('wheel', (e) => {
+            if (e.deltaY > 0) { if (currentIndex < items.length - 1) { currentIndex++; updateCarousel(); } }
+            else { if (currentIndex > 0) { currentIndex--; updateCarousel(); } }
+        });
+
+        // === 다이어리 커스터마이징 (제목/색상) ===
+        function syncCustomizePanel(index) {
+            const customTitleInput = document.getElementById('custom-title');
+            const customColorInput = document.getElementById('custom-color');
+            
+            if(index === userDiaries.length) {
+                customTitleInput.value = '';
+                customTitleInput.disabled = true;
+                customColorInput.disabled = true;
+                return;
+            }
+            
+            customTitleInput.disabled = false;
+            customColorInput.disabled = false;
+            customTitleInput.value = userDiaries[index].title;
+            customColorInput.value = rgbToHex(items[index].style.backgroundColor);
+        }
+
+        window.updateActiveTitle = function(text) {
+            if(currentIndex === userDiaries.length) return;
+            if(text.trim() === "") text = "새로운 일기장";
+            userDiaries[currentIndex].title = text;
+            items[currentIndex].querySelector('.cover-title').innerHTML = text;
+            saveUserDiaries();
+        }
+
+        window.updateActiveColor = function(colorHex) {
+            if(currentIndex === userDiaries.length) return;
+            userDiaries[currentIndex].color = colorHex;
+            items[currentIndex].style.backgroundColor = colorHex;
+            saveUserDiaries();
+        }
+
+        function rgbToHex(rgb) {
+            if(!rgb.startsWith('rgb')) return rgb;
+            const rgbArr = rgb.match(/\d+/g);
+            return "#" + ((1 << 24) + (parseInt(rgbArr[0]) << 16) + (parseInt(rgbArr[1]) << 8) + parseInt(rgbArr[2])).toString(16).slice(1);
+        }
+
+        // === 화면 전환 및 버그 수정 부분 ===
+        const carouselScreen = document.getElementById('carousel-screen');
+        const diaryScreen = document.getElementById('diary-screen');
+        const diaryBorder = document.getElementById('diary-border');
+        let currentPageIndex = 0;
+
+        function openDiaryWithAnimation() {
+            activeDiaryId = userDiaries[currentIndex].id;
+            const activeItem = items[currentIndex];
+            
+            activeItem.classList.add('opening');
+            diaryBorder.style.borderColor = activeItem.style.backgroundColor;
+
+            loadDiaryDataOfDate(selectedDate);
+
+            setTimeout(() => {
+                carouselScreen.classList.add('hidden');
+                setTimeout(() => { diaryScreen.classList.remove('hidden'); }, 300);
+            }, 400);
+        }
+
+        // [버그 수정] 다이어리를 덮을 때 상태를 완전히 초기화합니다.
+        window.goBack = function() {
+            saveCurrentPageState(); 
+            
+            // 다이어리 스크린 숨기기
+            diaryScreen.classList.add('hidden');
+            
+            setTimeout(() => { 
+                carouselScreen.classList.remove('hidden'); 
+                
+                // 트랜지션 클래스 완벽히 제거하여 클릭 잠김 현상 해소
+                if(items[currentIndex]) {
+                    items[currentIndex].classList.remove('opening');
+                }
+                
+                // 캐러셀 상태 강제 업데이트
+                updateCarousel();
+            }, 500);
+        }
+
+        // === 다이어리 내부 (데이터 및 페이지 처리) ===
+        window.handleDateChange = function(newDate) {
+            saveCurrentPageState(); 
+            selectedDate = newDate;
+            currentPageIndex = 0; 
+            loadDiaryDataOfDate(selectedDate);
+        }
+
+        async function loadDiaryDataOfDate(date) {
+            if(!userEntries[activeDiaryId]) userEntries[activeDiaryId] = {};
+            
+            // 로컬 메모리에 데이터가 없는 경우 Firestore 클라우드에서 동적으로 실시간 로드
+            if(!userEntries[activeDiaryId][date] && auth.currentUser) {
+                try {
+                    const uid = auth.currentUser.uid;
+                    const docSnap = await getDoc(doc(db, "users", uid, "entries", `${activeDiaryId}_${date}`));
+                    if (docSnap.exists()) {
+                        userEntries[activeDiaryId][date] = docSnap.data().pages || [{ text: "", image: "" }];
+                    }
+                } catch (error) {
+                    console.error("Firestore 날짜 데이터 로드 실패:", error);
+                }
+            }
+
+            if(!userEntries[activeDiaryId][date] || userEntries[activeDiaryId][date].length === 0) {
+                userEntries[activeDiaryId][date] = [{ text: "", image: "" }];
+            }
+            renderPage();
+        }
+
+        function renderPage() {
+            const pages = userEntries[activeDiaryId][selectedDate];
+            const currentPage = pages[currentPageIndex];
+
+            document.getElementById('diary-input').value = currentPage.text || "";
+            const preview = document.getElementById('image-preview');
+            const uploadText = document.getElementById('upload-text');
+            
+            if (currentPage.image) {
+                preview.src = currentPage.image;
+                preview.style.display = 'block';
+                uploadText.style.display = 'none';
+            } else {
+                preview.src = "";
+                preview.style.display = 'none';
+                uploadText.style.display = 'block';
+            }
+
+            document.getElementById('page-indicator').innerText = `${currentPageIndex + 1} / ${pages.length}`;
+            document.getElementById('prev-page-btn').disabled = (currentPageIndex === 0);
+            document.getElementById('next-page-btn').disabled = (currentPageIndex === pages.length - 1);
+        }
+
+        function saveCurrentPageState() {
+            if(!activeDiaryId) return;
+            const text = document.getElementById('diary-input').value;
+            const image = document.getElementById('image-preview').src;
+            const finalImage = image.startsWith('data:image') ? image : "";
+
+            if(!userEntries[activeDiaryId]) userEntries[activeDiaryId] = {};
+            if(!userEntries[activeDiaryId][selectedDate]) userEntries[activeDiaryId][selectedDate] = [];
+            
+            userEntries[activeDiaryId][selectedDate][currentPageIndex] = { text: text, image: finalImage };
+            saveUserEntries(); 
+        }
+
+        window.navigatePage = function(direction) {
+            const diaryContainer = document.getElementById('diary-border');
+            diaryContainer.style.opacity = 0.3;
+            setTimeout(() => {
+                saveCurrentPageState();
+                currentPageIndex += direction;
+                renderPage();
+                diaryContainer.style.opacity = 1;
+            }, 150);
+        }
+
+        window.addNewPage = function() {
+            saveCurrentPageState();
+            userEntries[activeDiaryId][selectedDate].push({ text: "", image: "" });
+            currentPageIndex = userEntries[activeDiaryId][selectedDate].length - 1; 
+            renderPage();
+            document.getElementById('diary-input').focus();
+        }
+
+        // === 사진 업로드 ===
+        document.getElementById('image-upload').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('image-preview').src = e.target.result;
+                    document.getElementById('image-preview').style.display = 'block';
+                    document.getElementById('upload-text').style.display = 'none';
+                    saveCurrentPageState();
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // === AI 시스템 ===
+        const aiModal = document.getElementById('ai-modal');
+        const aiMessage = document.getElementById('ai-message');
+        const aiEmoji = document.getElementById('ai-emoji');
+
+        window.saveDiary = function() {
+            saveCurrentPageState();
+            const text = document.getElementById('diary-input').value.trim();
+            if (text === "") { alert("현재 장에 일기 내용을 작성해주세요!"); return; }
+
+            aiModal.style.display = 'flex';
+            aiMessage.innerText = "당신의 일기를 깊게 읽으며 감정을 분석하고 있습니다...";
+            aiEmoji.innerText = "🔍🤖";
+
+            const sadWords = ["슬퍼", "우울", "힘들", "지쳐", "눈물", "외로워", "피곤", "속상", "아파", "무기력"];
+            const happyWords = ["좋아", "행복", "재밌", "최고", "신나", "즐거워", "기뻐", "설레", "완벽해", "뿌듯", "웃겨"];
+            const angryWords = ["화나", "짜증", "열받", "어이없", "미워", "분해", "답답"];
+            const hasWord = (wordsArray, inputText) => wordsArray.some(word => inputText.includes(word));
+
+            setTimeout(() => {
+                if (hasWord(angryWords, text)) {
+                    aiEmoji.innerText = "😤🍵";
+                    aiMessage.innerHTML = "오늘 속상하고 답답한 일들이 마음을 흔들었나 봐요.<br>따뜻한 차 한 잔 마시며 마음의 열기를 조금 식혀보세요.";
+                } else if (hasWord(sadWords, text)) {
+                    aiEmoji.innerText = "🥺💖";
+                    aiMessage.innerHTML = "마음이 무거운 하루였군요. 애써 버텨내느라 수고 많았어요.<br>오늘 밤은 생각의 짐을 내려두고 편안해지길 바라요.";
+                } else if (hasWord(happyWords, text)) {
+                    aiEmoji.innerText = "🥰🎉";
+                    aiMessage.innerHTML = "미소가 지어지는 멋진 페이지를 기록하셨네요!<br>행복으로 물든 당신의 하루를 보며 저까지 기분 좋아져요.";
+                } else {
+                    aiEmoji.innerText = "😌📝";
+                    aiMessage.innerHTML = "차분하고 소중한 일상의 한 조각을 남겨주셨군요.<br>화려하지 않아도 정성스레 하루를 정돈하는 게 큰 힘이 된답니다.";
+                }
+            }, 1500);
+        }
+
+        window.closeModal = function() { aiModal.style.display = 'none'; }
+    </script>
+</body>
+</html>
